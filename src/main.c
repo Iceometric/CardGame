@@ -75,7 +75,8 @@ size_t get_index_of_first_empty_in_play(PlayerState *p) {
             return i;
         }
     }
-    return NULL;
+    exit(ERROR);
+    return -1;
 }
 
 void handle_input(int input, Game *g) {
