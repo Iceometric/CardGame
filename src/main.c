@@ -3,10 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define str(x) #x
+#define xstr(x) str(x)
+
 #define SUCCESS 0
 #define BUFFER_SIZE 1024
-
-#define CARD_SEPERATOR for (size_t i = 0; i < MAX_NAME_SIZE; ++i) { fputc('#', stdout); } fputc('\n', stdout)
 
 #define MAX_NAME_SIZE 64
 #define MAX_DECK_SIZE 100
@@ -30,11 +31,88 @@ typedef struct Card {
     int (*on_round_start_effect)(void);
 } Card;
 
+int print_tjena() {
+    printf("Tjena din jävel\n");
+    return SUCCESS;
+}
+
+int print_hejsan() {
+    printf("Hejsan din jävel\n");
+    return SUCCESS;
+}
+
+void print_mana(int *mana) {
+    fprintf(stdout, "%s: %d\n", xstr(VOID), mana[VOID]); 
+    fprintf(stdout, "%s: %d\n", xstr(LIGHT), mana[LIGHT]);
+    fprintf(stdout, "%s: %d\n", xstr(TIME), mana[TIME]);
+    fprintf(stdout, "%s: %d\n", xstr(FIRE), mana[FIRE]);
+    fprintf(stdout, "%s: %d\n", xstr(EARTH), mana[EARTH]); 
+    fprintf(stdout, "%s: %d\n", xstr(LIGHTNING), mana[LIGHTNING]); 
+    fprintf(stdout, "%s: %d\n", xstr(WATER), mana[WATER]);
+}
+
+// Card design
+Card test[SIZE_ALL_CARDS] = {
+    {
+        .name = "Tjena",
+        .mana_cost[VOID] = 0,
+        .mana_cost[LIGHT] = 0,
+        .mana_cost[TIME] = 0,
+        .mana_cost[FIRE] = 0,
+        .mana_cost[EARTH] = 0,
+        .mana_cost[LIGHTNING] = 0,
+        .mana_cost[WATER] = 0,
+        .life_time = 5,
+        .on_play_effect = print_tjena,
+        .on_round_start_effect = print_tjena,
+    }, 
+    {
+        .name = "Hejsan",
+        .mana_cost[VOID] = 0,
+        .mana_cost[LIGHT] = 0,
+        .mana_cost[TIME] = 0,
+        .mana_cost[FIRE] = 0,
+        .mana_cost[EARTH] = 0,
+        .mana_cost[LIGHTNING] = 0,
+        .mana_cost[WATER] = 0,
+        .life_time = -1,
+        .on_play_effect = print_hejsan,
+        .on_round_start_effect = print_hejsan,
+    }, 
+    {
+        .name = "Channel Void",
+        .mana_cost[VOID] = 0,
+        .mana_cost[LIGHT] = 0,
+        .mana_cost[TIME] = 0,
+        .mana_cost[FIRE] = 0,
+        .mana_cost[EARTH] = 0,
+        .mana_cost[LIGHTNING] = 0,
+        .mana_cost[WATER] = 0,
+        .life_time = -1,
+        .on_play_effect = print_hejsan,
+        .on_round_start_effect = print_hejsan,
+    },
+    {
+        .name = "Channel Light",
+        .mana_cost[VOID] = 0,
+        .mana_cost[LIGHT] = 0,
+        .mana_cost[TIME] = 0,
+        .mana_cost[FIRE] = 0,
+        .mana_cost[EARTH] = 0,
+        .mana_cost[LIGHTNING] = 0,
+        .mana_cost[WATER] = 0,
+        .life_time = -1,
+        .on_play_effect = print_hejsan,
+        .on_round_start_effect = print_hejsan,
+    }
+};
+
 typedef struct CardState {
     int life_time;
 } CardState;
 
 typedef struct PlayerState {
+    int mana[NUMBER_OF_ELEMENTS];
     Card *deck[MAX_DECK_SIZE];
     Card *hand[MAX_HAND_SIZE];
     Card *draw[MAX_DECK_SIZE];
@@ -53,8 +131,9 @@ typedef struct Game {
 } Game;
 
 void print_card(Card *c, size_t n) {
-    // CARD_SEPERATOR;
-    fprintf(stdout, "%lu: %s | ", n, c->name);
+    fprintf(stdout, "%lu: %s\n", n, c->name);
+    print_mana(c->mana_cost);
+    fprintf(stdout, "\n");
 }
 
 void print_hand(PlayerState *p) {
@@ -113,6 +192,7 @@ void allocate_resources(Game *g) {
     memset(g->player_state.in_play,     '\0', sizeof(Card*) * MAX_DECK_SIZE);
     memset(g->player_state.card_state,  '\0', sizeof(CardState) * MAX_DECK_SIZE);
     memset(g->all_cards,                '\0', sizeof(Card) * SIZE_ALL_CARDS);
+    memset(g->player_state.mana,        '\0', sizeof(int) * NUMBER_OF_ELEMENTS);
 }
 
 void clean_up_resources(Game *g) {
@@ -120,16 +200,6 @@ void clean_up_resources(Game *g) {
 
 int check_input(char *str) {
     return strcmp(str, "error") == 0 ? ERROR : NO_ERROR;
-}
-
-int print_tjena() {
-    printf("Tjena din jävel\n");
-    return SUCCESS;
-}
-
-int print_hejsan() {
-    printf("Hejsan din jävel\n");
-    return SUCCESS;
 }
 
 void handle_round_start(Game *g) {
@@ -151,22 +221,8 @@ void handle_round_start(Game *g) {
 }
 
 void run_application(Game *game) {
-    printf("Start up...\n");
-
-    // temp mocking
-    memcpy(game->all_cards[0].name, "Tjena\0", 6);
-    game->all_cards[0].on_play_effect = print_tjena;
-    game->all_cards[0].on_round_start_effect = print_tjena;
-    game->all_cards[0].life_time = 5;
-
-    Card *card2 = &game->all_cards[1];
-    memcpy(card2->name, "Hejsan\0", 7);
-    game->all_cards[1].on_play_effect = print_hejsan;
-    game->all_cards[1].on_round_start_effect = print_hejsan;
-    game->all_cards[1].life_time = -1;
-
-    game->player_state.hand[0] = &game->all_cards[0];
-    game->player_state.hand[1] = &game->all_cards[1];
+    game->player_state.hand[0] = &test[0];
+    game->player_state.hand[1] = &test[1];
 
     int player_input;
     scanf("%s", game->buffer);
@@ -174,6 +230,8 @@ void run_application(Game *game) {
 
         handle_round_start(game);
         print_hand(&game->player_state);
+        fprintf(stdout, "--- PLAYER ---\n");
+        print_mana(game->player_state.mana);
 
         scanf("%s", game->buffer);
         if (strcmp(game->buffer, "q") == 0) break;
