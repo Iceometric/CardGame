@@ -26,14 +26,12 @@ typedef struct Card {
     char name[MAX_NAME_SIZE];
     int mana_cost[NUMBER_OF_ELEMENTS];
     int life_time;
-    int durabillity;
     int (*on_play_effect)(void);
     int (*on_round_start_effect)(void);
 } Card;
 
 typedef struct CardState {
     int life_time;
-    int durabillity;
 } CardState;
 
 typedef struct PlayerState {
@@ -55,8 +53,8 @@ typedef struct Game {
 } Game;
 
 void print_card(Card *c, size_t n) {
-    CARD_SEPERATOR;
-    fprintf(stdout, "%lu: %s\n", n, c->name);
+    // CARD_SEPERATOR;
+    fprintf(stdout, "%lu: %s | ", n, c->name);
 }
 
 void print_hand(PlayerState *p) {
@@ -66,7 +64,7 @@ void print_hand(PlayerState *p) {
             print_card(p->hand[i], i);
         }
     }
-    CARD_SEPERATOR;
+    fprintf(stdout, "\n");
 }
 
 size_t get_index_of_first_empty_in_play(PlayerState *p) {
@@ -81,16 +79,14 @@ size_t get_index_of_first_empty_in_play(PlayerState *p) {
 
 void handle_input(int input, Game *g) {
     PlayerState *p = &g->player_state;
-    printf("Player played: %d\n", input);
     if (p->hand[input]) {
-        printf("%s\n", p->hand[input]->name);
+        printf("Played card(%d): %s\n", input, p->hand[input]->name);
         if (p->hand[input]->on_play_effect()) {
             exit(ERROR);
         };
         size_t index = get_index_of_first_empty_in_play(p);
         p->in_play[index] = p->hand[input];
         p->card_state[index].life_time = p->hand[input]->life_time;
-        p->card_state[index].durabillity = p->hand[input]->durabillity;
         p->hand[input] = NULL;
     } else {
         printf("Card out of range!\n");
@@ -139,14 +135,16 @@ int print_hejsan() {
 void handle_round_start(Game *g) {
     PlayerState *p = &g->player_state;
     for (size_t i = 0; i < MAX_DECK_SIZE; ++i) {
-        if (p->in_play[i]) {
-            printf("Found card %s with life_time: %d\n", p->in_play[i]->name, p->card_state[i].life_time);
-            p->in_play[i]->on_round_start_effect();
-            if (p->card_state[i].life_time > 0) { p->card_state[i].life_time--; }
-            if (p->card_state[i].life_time == 0) {
-                p->in_play[i] = NULL;
-                memset(&p->card_state,'\0',sizeof(CardState));
-            }
+        if (!p->in_play[i]) { continue; }
+
+        printf("Found card %s with life_time: %d\n", p->in_play[i]->name, p->card_state[i].life_time);
+        p->in_play[i]->on_round_start_effect();
+        if (p->card_state[i].life_time > 0) { 
+            p->card_state[i].life_time -= 1;
+        }
+        if (p->card_state[i].life_time == 0) {
+            p->in_play[i] = NULL;
+            memset(&p->card_state[i],'\0',sizeof(CardState));
         }
     }
     scanf("%s", g->buffer);
@@ -173,13 +171,17 @@ void run_application(Game *game) {
     int player_input;
     scanf("%s", game->buffer);
     while (game->is_running) {
+
         handle_round_start(game);
         print_hand(&game->player_state);
+
         scanf("%s", game->buffer);
         if (strcmp(game->buffer, "q") == 0) break;
+
         player_input = atoi(game->buffer);
         if (!is_valid_input(player_input, game)) continue;
         handle_input(player_input, game);
+
         game->error = check_input(game->buffer);
         if (game->error) exit(game->error);
     }
