@@ -37,6 +37,8 @@ typedef struct CardState {
 
 typedef struct PlayerState {
     int mana[NUMBER_OF_ELEMENTS];
+    Card **next_draw;
+    size_t draw_count;
     Card *deck[MAX_DECK_SIZE];
     Card *hand[MAX_HAND_SIZE];
     Card *draw[MAX_DECK_SIZE];
@@ -79,6 +81,12 @@ int increment_light(void *p) {
 int increment_time(void *p) {
     Game *g = (Game*) p;
     g->player_state.mana[TIME]++;
+    return SUCCESS;
+}
+
+int increment_draw_count(void *p) {
+    Game *g = p;
+    g->player_state.draw_count++;
     return SUCCESS;
 }
 
@@ -162,6 +170,19 @@ Card test[SIZE_ALL_CARDS] = {
         .life_time = -1,
         .on_play_effect = nothing,
         .on_round_start_effect = increment_time,
+    },
+    {
+        .name = "Draw increase",
+        .mana_cost[VOID] = 0,
+        .mana_cost[LIGHT] = 0,
+        .mana_cost[TIME] = 0,
+        .mana_cost[FIRE] = 0,
+        .mana_cost[EARTH] = 0,
+        .mana_cost[LIGHTNING] = 0,
+        .mana_cost[WATER] = 0,
+        .life_time = -1,
+        .on_play_effect = increment_draw_count,
+        .on_round_start_effect = nothing,
     }
 };
 
@@ -181,9 +202,9 @@ void print_hand(PlayerState *p) {
     fprintf(stdout, "\n");
 }
 
-size_t get_index_of_first_empty_in_play(PlayerState *p) {
-    for (size_t i = 0; i < MAX_DECK_SIZE; ++i) {
-        if (!p->in_play[i]) {
+size_t get_index_of_first_empty(Card **c, size_t max) {
+    for (size_t i = 0; i < max; ++i) {
+        if (!c[i]) {
             return i;
         }
     }
@@ -198,7 +219,7 @@ void handle_input(int input, Game *g) {
         if (p->hand[input]->on_play_effect(g)) {
             exit(ERROR);
         };
-        size_t index = get_index_of_first_empty_in_play(p);
+        size_t index = get_index_of_first_empty(p->in_play, MAX_DECK_SIZE);
         p->in_play[index] = p->hand[input];
         p->card_state[index].life_time = p->hand[input]->life_time;
         p->hand[input] = NULL;
@@ -221,6 +242,7 @@ void allocate_resources(Game *g) {
     g->error = NO_ERROR;
     g->is_running = 1;
     g->player_turn = 1;
+    g->player_state.draw_count = 1;
 
     memset(g->player_state.hand,        '\0', sizeof(Card*) * MAX_HAND_SIZE);
     memset(g->player_state.deck,        '\0', sizeof(Card*) * MAX_DECK_SIZE);
@@ -245,8 +267,21 @@ void reset_mana(PlayerState *p) {
     }
 }
 
-void handle_draw(PlayerState *p) {
+void handle_draw_damage(void) {
 
+}
+
+void handle_draw(PlayerState *p) {
+    for (size_t i = 0; i < p->draw_count; ++i) {
+        if (!(p->next_draw < p->draw)) {
+            size_t i = get_index_of_first_empty(p->hand, MAX_HAND_SIZE);
+            p->hand[i] = *p->next_draw;
+            *p->next_draw = NULL;
+            p->next_draw--;
+        } else {
+            handle_draw_damage();
+        }
+    }
 }
 
 void handle_life_time(Game *g) {
@@ -281,13 +316,27 @@ void handle_enemy_round(Game *g) {
 
 }
 
+void shuffle_deck_into_draw(PlayerState *p) {
+    Card **draw = p->draw;
+    for (size_t i = 0; i < MAX_DECK_SIZE; ++i) {
+        if (p->deck[i]) {
+            *draw = p->deck[i];
+            draw++;
+        }
+    }
+}
+
 void run_application(Game *game) {
-    game->player_state.hand[0] = &test[0];
-    game->player_state.hand[1] = &test[1];
-    game->player_state.hand[2] = &test[2];
-    game->player_state.hand[3] = &test[3];
-    game->player_state.hand[4] = &test[4];
-    game->player_state.hand[5] = &test[2];
+    game->player_state.deck[0] = &test[0];
+    game->player_state.deck[1] = &test[1];
+    game->player_state.deck[2] = &test[2];
+    game->player_state.deck[3] = &test[3];
+    game->player_state.deck[4] = &test[4];
+    game->player_state.deck[5] = &test[2];
+    game->player_state.deck[6] = &test[5];
+    game->player_state.next_draw = &game->player_state.draw[6];
+
+    shuffle_deck_into_draw(&game->player_state);
 
     int player_input;
     scanf("%s", game->buffer);
@@ -303,7 +352,7 @@ void run_application(Game *game) {
 
             scanf("%s", game->buffer);
             player_input = atoi(game->buffer);
-            game->is_running =  (strcmp(game->buffer, "q") != 0); 
+            game->is_running  = (strcmp(game->buffer, "q") != 0); 
             game->player_turn = (strcmp(game->buffer, "d") != 0);
 
             if (is_valid_input(player_input, game)) {
