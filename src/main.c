@@ -17,6 +17,10 @@
 
 #define CLEAR_SCREEN printf("\033[1;1H\033[2J")
 
+typedef enum LifeTime {
+    ENDLESS = -1
+} LifeTime;
+
 typedef enum Mana {
      VOID, LIGHT, TIME, FIRE, EARTH, LIGHTNING, WATER, NUMBER_OF_ELEMENTS
 } Mana;
@@ -37,6 +41,7 @@ typedef struct CardState {
 
 typedef struct PlayerState {
     int mana[NUMBER_OF_ELEMENTS];
+    int health;
     Card **next_draw;
     size_t draw_count;
     Card *deck[MAX_DECK_SIZE];
@@ -108,7 +113,7 @@ void print_mana(int *mana) {
 Card test[SIZE_ALL_CARDS] = {
     {
         .name = "Tjena",
-        .mana_cost[VOID] = 0,
+        .mana_cost[VOID] = 1,
         .mana_cost[LIGHT] = 0,
         .mana_cost[TIME] = 0,
         .mana_cost[FIRE] = 0,
@@ -122,13 +127,13 @@ Card test[SIZE_ALL_CARDS] = {
     {
         .name = "Hejsan",
         .mana_cost[VOID] = 0,
-        .mana_cost[LIGHT] = 0,
+        .mana_cost[LIGHT] = 1,
         .mana_cost[TIME] = 0,
         .mana_cost[FIRE] = 0,
         .mana_cost[EARTH] = 0,
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
-        .life_time = -1,
+        .life_time = ENDLESS,
         .on_play_effect = print_hejsan,
         .on_round_start_effect = print_hejsan,
     }, 
@@ -141,7 +146,7 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[EARTH] = 0,
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
-        .life_time = -1,
+        .life_time = ENDLESS,
         .on_play_effect = nothing,
         .on_round_start_effect = increment_void,
     },
@@ -154,7 +159,7 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[EARTH] = 0,
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
-        .life_time = -1,
+        .life_time = ENDLESS,
         .on_play_effect = nothing,
         .on_round_start_effect = increment_light,
     },
@@ -167,7 +172,7 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[EARTH] = 0,
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
-        .life_time = -1,
+        .life_time = ENDLESS,
         .on_play_effect = nothing,
         .on_round_start_effect = increment_time,
     },
@@ -180,7 +185,7 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[EARTH] = 0,
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
-        .life_time = -1,
+        .life_time = ENDLESS,
         .on_play_effect = increment_draw_count,
         .on_round_start_effect = nothing,
     }
@@ -212,13 +217,38 @@ size_t get_index_of_first_empty(Card **c, size_t max) {
     return -1;
 }
 
+int not_enough_mana(int *cost, int *mana) {
+    return cost[VOID]      > mana[VOID]
+        || cost[LIGHT]     > mana[LIGHT]
+        || cost[TIME]      > mana[TIME]
+        || cost[FIRE]      > mana[FIRE]
+        || cost[EARTH]     > mana[EARTH]
+        || cost[LIGHTNING] > mana[LIGHTNING]
+        || cost[WATER]     > mana[WATER];
+}
+
+void remove_mana(int *cost, int *mana) {
+    mana[VOID]      -= cost[VOID];
+    mana[LIGHT]     -= cost[LIGHT];
+    mana[TIME]      -= cost[TIME];
+    mana[FIRE]      -= cost[FIRE];
+    mana[EARTH]     -= cost[EARTH];
+    mana[LIGHTNING] -= cost[LIGHTNING];
+    mana[WATER]     -= cost[WATER];
+}
+
 void handle_input(int input, Game *g) {
     PlayerState *p = &g->player_state;
     if (p->hand[input]) {
+        if (not_enough_mana(p->hand[input]->mana_cost, p->mana)) {
+            printf("Not enough mana\n");
+            return;
+        }
         printf("Played card(%d): %s\n", input, p->hand[input]->name);
         if (p->hand[input]->on_play_effect(g)) {
             exit(ERROR);
         };
+        remove_mana(p->hand[input]->mana_cost, p->mana);
         size_t index = get_index_of_first_empty(p->in_play, MAX_DECK_SIZE);
         p->in_play[index] = p->hand[input];
         p->card_state[index].life_time = p->hand[input]->life_time;
@@ -243,6 +273,7 @@ void allocate_resources(Game *g) {
     g->is_running = 1;
     g->player_turn = 1;
     g->player_state.draw_count = 1;
+    g->player_state.health = 40;
 
     memset(g->player_state.hand,        '\0', sizeof(Card*) * MAX_HAND_SIZE);
     memset(g->player_state.deck,        '\0', sizeof(Card*) * MAX_DECK_SIZE);
