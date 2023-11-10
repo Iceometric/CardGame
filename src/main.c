@@ -27,28 +27,73 @@ typedef struct Card {
     char name[MAX_NAME_SIZE];
     int mana_cost[NUMBER_OF_ELEMENTS];
     int life_time;
-    int (*on_play_effect)(void);
-    int (*on_round_start_effect)(void);
+    int (*on_play_effect)(void*);
+    int (*on_round_start_effect)(void*);
 } Card;
 
-int print_tjena() {
+typedef struct CardState {
+    int life_time;
+} CardState;
+
+typedef struct PlayerState {
+    int mana[NUMBER_OF_ELEMENTS];
+    Card *deck[MAX_DECK_SIZE];
+    Card *hand[MAX_HAND_SIZE];
+    Card *draw[MAX_DECK_SIZE];
+    Card *discard[MAX_DECK_SIZE];
+    Card *in_play[MAX_DECK_SIZE];
+    CardState card_state[MAX_DECK_SIZE];
+} PlayerState;
+
+typedef struct Game {
+    int error;
+    int is_running;
+    int player_turn;
+    char buffer[BUFFER_SIZE];
+    Card all_cards[SIZE_ALL_CARDS];
+    PlayerState player_state;
+} Game;
+
+int print_tjena(void *g) {
     printf("Tjena din jävel\n");
     return SUCCESS;
 }
 
-int print_hejsan() {
+int print_hejsan(void *g) {
     printf("Hejsan din jävel\n");
     return SUCCESS;
 }
 
+int increment_void(void *p) {
+    Game *g = (Game*) p;
+    g->player_state.mana[VOID]++;
+    return SUCCESS;
+}
+
+int increment_light(void *p) {
+    Game *g = (Game*) p;
+    g->player_state.mana[LIGHT]++;
+    return SUCCESS;
+}
+
+int increment_time(void *p) {
+    Game *g = (Game*) p;
+    g->player_state.mana[TIME]++;
+    return SUCCESS;
+}
+
+int nothing(void* p) {
+    return SUCCESS;
+}
+
 void print_mana(int *mana) {
-    fprintf(stdout, "%s: %d\n", xstr(VOID), mana[VOID]); 
-    fprintf(stdout, "%s: %d\n", xstr(LIGHT), mana[LIGHT]);
-    fprintf(stdout, "%s: %d\n", xstr(TIME), mana[TIME]);
-    fprintf(stdout, "%s: %d\n", xstr(FIRE), mana[FIRE]);
-    fprintf(stdout, "%s: %d\n", xstr(EARTH), mana[EARTH]); 
-    fprintf(stdout, "%s: %d\n", xstr(LIGHTNING), mana[LIGHTNING]); 
-    fprintf(stdout, "%s: %d\n", xstr(WATER), mana[WATER]);
+    fprintf(stdout, "%s: \t\t%d\n", xstr(VOID), mana[VOID]); 
+    fprintf(stdout, "%s: \t\t%d\n", xstr(LIGHT), mana[LIGHT]);
+    fprintf(stdout, "%s: \t\t%d\n", xstr(TIME), mana[TIME]);
+    fprintf(stdout, "%s: \t\t%d\n", xstr(FIRE), mana[FIRE]);
+    fprintf(stdout, "%s: \t\t%d\n", xstr(EARTH), mana[EARTH]); 
+    fprintf(stdout, "%s: \t%d\n", xstr(LIGHTNING), mana[LIGHTNING]); 
+    fprintf(stdout, "%s: \t\t%d\n", xstr(WATER), mana[WATER]);
 }
 
 // Card design
@@ -89,8 +134,8 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
         .life_time = -1,
-        .on_play_effect = print_hejsan,
-        .on_round_start_effect = print_hejsan,
+        .on_play_effect = nothing,
+        .on_round_start_effect = increment_void,
     },
     {
         .name = "Channel Light",
@@ -102,33 +147,23 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
         .life_time = -1,
-        .on_play_effect = print_hejsan,
-        .on_round_start_effect = print_hejsan,
+        .on_play_effect = nothing,
+        .on_round_start_effect = increment_light,
+    },
+    {
+        .name = "Channel Time",
+        .mana_cost[VOID] = 0,
+        .mana_cost[LIGHT] = 0,
+        .mana_cost[TIME] = 0,
+        .mana_cost[FIRE] = 0,
+        .mana_cost[EARTH] = 0,
+        .mana_cost[LIGHTNING] = 0,
+        .mana_cost[WATER] = 0,
+        .life_time = -1,
+        .on_play_effect = nothing,
+        .on_round_start_effect = increment_time,
     }
 };
-
-typedef struct CardState {
-    int life_time;
-} CardState;
-
-typedef struct PlayerState {
-    int mana[NUMBER_OF_ELEMENTS];
-    Card *deck[MAX_DECK_SIZE];
-    Card *hand[MAX_HAND_SIZE];
-    Card *draw[MAX_DECK_SIZE];
-    Card *discard[MAX_DECK_SIZE];
-    Card *in_play[MAX_DECK_SIZE];
-    CardState card_state[MAX_DECK_SIZE];
-} PlayerState;
-
-typedef struct Game {
-    int error;
-    int is_running;
-    int player_turn;
-    char buffer[BUFFER_SIZE];
-    Card all_cards[SIZE_ALL_CARDS];
-    PlayerState player_state;
-} Game;
 
 void print_card(Card *c, size_t n) {
     fprintf(stdout, "%lu: %s\n", n, c->name);
@@ -160,7 +195,7 @@ void handle_input(int input, Game *g) {
     PlayerState *p = &g->player_state;
     if (p->hand[input]) {
         printf("Played card(%d): %s\n", input, p->hand[input]->name);
-        if (p->hand[input]->on_play_effect()) {
+        if (p->hand[input]->on_play_effect(g)) {
             exit(ERROR);
         };
         size_t index = get_index_of_first_empty_in_play(p);
@@ -185,6 +220,8 @@ int is_valid_input(int input, Game *g) {
 void allocate_resources(Game *g) {
     g->error = NO_ERROR;
     g->is_running = 1;
+    g->player_turn = 1;
+
     memset(g->player_state.hand,        '\0', sizeof(Card*) * MAX_HAND_SIZE);
     memset(g->player_state.deck,        '\0', sizeof(Card*) * MAX_DECK_SIZE);
     memset(g->player_state.draw,        '\0', sizeof(Card*) * MAX_DECK_SIZE);
@@ -202,46 +239,81 @@ int check_input(char *str) {
     return strcmp(str, "error") == 0 ? ERROR : NO_ERROR;
 }
 
-void handle_round_start(Game *g) {
+void reset_mana(PlayerState *p) {
+    for (size_t i = 0; i < NUMBER_OF_ELEMENTS; ++i) {
+        p->mana[i] = 0;
+    }
+}
+
+void handle_draw(PlayerState *p) {
+
+}
+
+void handle_life_time(Game *g) {
     PlayerState *p = &g->player_state;
     for (size_t i = 0; i < MAX_DECK_SIZE; ++i) {
-        if (!p->in_play[i]) { continue; }
+        if (!p->in_play[i]) {
+            continue; 
+        }
 
         printf("Found card %s with life_time: %d\n", p->in_play[i]->name, p->card_state[i].life_time);
-        p->in_play[i]->on_round_start_effect();
+        p->in_play[i]->on_round_start_effect(g);
         if (p->card_state[i].life_time > 0) { 
             p->card_state[i].life_time -= 1;
         }
+
         if (p->card_state[i].life_time == 0) {
             p->in_play[i] = NULL;
             memset(&p->card_state[i],'\0',sizeof(CardState));
         }
     }
-    scanf("%s", g->buffer);
+}
+
+void handle_round_start(Game *g) {
+    PlayerState *p = &g->player_state;
+    g->player_turn = 1;
+    reset_mana(p);
+    handle_life_time(g);
+    handle_draw(p);
+}
+
+void handle_enemy_round(Game *g) {
+
 }
 
 void run_application(Game *game) {
     game->player_state.hand[0] = &test[0];
     game->player_state.hand[1] = &test[1];
+    game->player_state.hand[2] = &test[2];
+    game->player_state.hand[3] = &test[3];
+    game->player_state.hand[4] = &test[4];
+    game->player_state.hand[5] = &test[2];
 
     int player_input;
     scanf("%s", game->buffer);
     while (game->is_running) {
 
+        handle_enemy_round(game);
         handle_round_start(game);
-        print_hand(&game->player_state);
-        fprintf(stdout, "--- PLAYER ---\n");
-        print_mana(game->player_state.mana);
+        
+        do {
+            print_hand(&game->player_state);
+            fprintf(stdout, "--- PLAYER ---\n");
+            print_mana(game->player_state.mana);
 
-        scanf("%s", game->buffer);
-        if (strcmp(game->buffer, "q") == 0) break;
+            scanf("%s", game->buffer);
+            player_input = atoi(game->buffer);
+            game->is_running =  (strcmp(game->buffer, "q") != 0); 
+            game->player_turn = (strcmp(game->buffer, "d") != 0);
 
-        player_input = atoi(game->buffer);
-        if (!is_valid_input(player_input, game)) continue;
-        handle_input(player_input, game);
+            if (is_valid_input(player_input, game)) {
+                handle_input(player_input, game);
+                scanf("%s", game->buffer);
+            }
+            game->error = check_input(game->buffer);
+            if (game->error) exit(game->error);
 
-        game->error = check_input(game->buffer);
-        if (game->error) exit(game->error);
+        } while (game->player_turn && game->is_running);
     }
     CLEAR_SCREEN;
 }
