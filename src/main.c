@@ -25,10 +25,15 @@ typedef enum Mana {
      VOID, LIGHT, TIME, FIRE, EARTH, LIGHTNING, WATER, NUMBER_OF_ELEMENTS
 } Mana;
 
+typedef enum CardType {
+    CONDUIT, ATTACK, SELF, ARTIFACT, BUFF
+} CardType;
+
 typedef enum Error { NO_ERROR = 0, ERROR, ALLOCATION_ERROR } Error;
 
 typedef struct Card {
     char name[MAX_NAME_SIZE];
+    CardType type;
     int mana_cost[NUMBER_OF_ELEMENTS];
     int life_time;
     int (*on_play_effect)(void*);
@@ -121,6 +126,7 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
         .life_time = 5,
+        .type = ATTACK,
         .on_play_effect = print_tjena,
         .on_round_start_effect = print_tjena,
     }, 
@@ -134,11 +140,12 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
         .life_time = ENDLESS,
+        .type = ARTIFACT,
         .on_play_effect = print_hejsan,
         .on_round_start_effect = print_hejsan,
     }, 
     {
-        .name = "Channel Void",
+        .name = "Void Conduit",
         .mana_cost[VOID] = 0,
         .mana_cost[LIGHT] = 0,
         .mana_cost[TIME] = 0,
@@ -147,11 +154,12 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
         .life_time = ENDLESS,
+        .type = CONDUIT,
         .on_play_effect = nothing,
         .on_round_start_effect = increment_void,
     },
     {
-        .name = "Channel Light",
+        .name = "Light Conduit",
         .mana_cost[VOID] = 0,
         .mana_cost[LIGHT] = 0,
         .mana_cost[TIME] = 0,
@@ -160,11 +168,12 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
         .life_time = ENDLESS,
+        .type = CONDUIT,
         .on_play_effect = nothing,
         .on_round_start_effect = increment_light,
     },
     {
-        .name = "Channel Time",
+        .name = "Time Conduit",
         .mana_cost[VOID] = 0,
         .mana_cost[LIGHT] = 0,
         .mana_cost[TIME] = 0,
@@ -173,6 +182,7 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
         .life_time = ENDLESS,
+        .type = CONDUIT,
         .on_play_effect = nothing,
         .on_round_start_effect = increment_time,
     },
@@ -185,7 +195,8 @@ Card test[SIZE_ALL_CARDS] = {
         .mana_cost[EARTH] = 0,
         .mana_cost[LIGHTNING] = 0,
         .mana_cost[WATER] = 0,
-        .life_time = ENDLESS,
+        .life_time = 2,
+        .type = BUFF,
         .on_play_effect = increment_draw_count,
         .on_round_start_effect = nothing,
     }
@@ -217,30 +228,25 @@ size_t get_index_of_first_empty(Card **c, size_t max) {
     return -1;
 }
 
-int not_enough_mana(int *cost, int *mana) {
-    return cost[VOID]      > mana[VOID]
-        || cost[LIGHT]     > mana[LIGHT]
-        || cost[TIME]      > mana[TIME]
-        || cost[FIRE]      > mana[FIRE]
-        || cost[EARTH]     > mana[EARTH]
-        || cost[LIGHTNING] > mana[LIGHTNING]
-        || cost[WATER]     > mana[WATER];
+int enough_mana(int *cost, int *mana) {
+    int enough_mana = 1;
+    for (size_t i = 0; i < NUMBER_OF_ELEMENTS; ++i) {
+        enough_mana = (cost[i] <= mana[i]);
+        if (!enough_mana) break;
+    }
+    return enough_mana;
 }
 
 void remove_mana(int *cost, int *mana) {
-    mana[VOID]      -= cost[VOID];
-    mana[LIGHT]     -= cost[LIGHT];
-    mana[TIME]      -= cost[TIME];
-    mana[FIRE]      -= cost[FIRE];
-    mana[EARTH]     -= cost[EARTH];
-    mana[LIGHTNING] -= cost[LIGHTNING];
-    mana[WATER]     -= cost[WATER];
+    for (size_t i = 0; i < NUMBER_OF_ELEMENTS; ++i) {
+        mana[i] -= cost[i];
+    }
 }
 
 void handle_input(int input, Game *g) {
     PlayerState *p = &g->player_state;
     if (p->hand[input]) {
-        if (not_enough_mana(p->hand[input]->mana_cost, p->mana)) {
+        if (!enough_mana(p->hand[input]->mana_cost, p->mana)) {
             printf("Not enough mana\n");
             return;
         }
