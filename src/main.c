@@ -4,7 +4,6 @@
 #include <string.h>
 
 #define str(x) #x
-#define xstr(x) str(x)
 
 #define SUCCESS 0
 #define BUFFER_SIZE 1024
@@ -104,13 +103,13 @@ int nothing(void* p) {
 }
 
 void print_mana(int *mana) {
-    fprintf(stdout, "%s: \t\t%d\n", xstr(VOID), mana[VOID]); 
-    fprintf(stdout, "%s: \t\t%d\n", xstr(LIGHT), mana[LIGHT]);
-    fprintf(stdout, "%s: \t\t%d\n", xstr(TIME), mana[TIME]);
-    fprintf(stdout, "%s: \t\t%d\n", xstr(FIRE), mana[FIRE]);
-    fprintf(stdout, "%s: \t\t%d\n", xstr(EARTH), mana[EARTH]); 
-    fprintf(stdout, "%s: \t%d\n", xstr(LIGHTNING), mana[LIGHTNING]); 
-    fprintf(stdout, "%s: \t\t%d\n", xstr(WATER), mana[WATER]);
+    fprintf(stdout, "%s: %d | ", str(VOID), mana[VOID]); 
+    fprintf(stdout, "%s: %d | ", str(LIGHT), mana[LIGHT]);
+    fprintf(stdout, "%s: %d | ", str(TIME), mana[TIME]);
+    fprintf(stdout, "%s: %d | ", str(FIRE), mana[FIRE]);
+    fprintf(stdout, "%s: %d | ", str(EARTH), mana[EARTH]); 
+    fprintf(stdout, "%s: %d | ", str(LIGHTNING), mana[LIGHTNING]); 
+    fprintf(stdout, "%s: %d |\n", str(WATER), mana[WATER]);
 }
 
 // Card design
@@ -323,9 +322,7 @@ void handle_draw(PlayerState *p) {
 void handle_life_time(Game *g) {
     PlayerState *p = &g->player_state;
     for (size_t i = 0; i < MAX_DECK_SIZE; ++i) {
-        if (!p->in_play[i]) {
-            continue; 
-        }
+        if (!p->in_play[i]) continue; 
 
         printf("Found card %s with life_time: %d\n", p->in_play[i]->name, p->card_state[i].life_time);
         p->in_play[i]->on_round_start_effect(g);
