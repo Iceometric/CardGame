@@ -15,11 +15,10 @@
 #define COUNT_MANA_TYPES 5
 #define SIZE_ALL_CARDS 20
 
-#define CLEAR_SCREEN printf("\033[1;1H\033[2J")
+#define ENDLESS -1
+#define DRAW_DAMAGE 1
 
-typedef enum LifeTime {
-    ENDLESS = -1
-} LifeTime;
+#define CLEAR_SCREEN printf("\033[1;1H\033[2J")
 
 typedef enum Mana {
      VOID, LIGHT, TIME, FIRE, EARTH, LIGHTNING, WATER, NUMBER_OF_ELEMENTS
@@ -304,8 +303,8 @@ void reset_mana(PlayerState *p) {
     }
 }
 
-void handle_draw_damage(void) {
-
+void handle_draw_damage(PlayerState *p) {
+    p->health -= DRAW_DAMAGE;
 }
 
 void handle_draw(PlayerState *p) {
@@ -316,7 +315,7 @@ void handle_draw(PlayerState *p) {
             *p->next_draw = NULL;
             p->next_draw--;
         } else {
-            handle_draw_damage();
+            handle_draw_damage(p);
         }
     }
 }
@@ -381,10 +380,12 @@ void run_application(Game *game) {
 
         handle_enemy_round(game);
         handle_round_start(game);
+        if (game->player_state.health <= 0) break;
         
         do {
             print_hand(&game->player_state);
-            fprintf(stdout, "--- PLAYER ---\n");
+            fprintf(stdout, "--- PLAYER - %dhp ---\n", game->player_state.health);
+            if (game->player_state.health <= 0) break;
             print_mana(game->player_state.mana);
 
             scanf("%s", game->buffer);
@@ -402,6 +403,7 @@ void run_application(Game *game) {
         } while (game->player_turn && game->is_running);
     }
     CLEAR_SCREEN;
+    if (game->player_state.health <= 0) printf("Game Over!\n");
 }
 
 void run(void) {
