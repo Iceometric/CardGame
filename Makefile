@@ -1,3 +1,4 @@
 all:
-	gcc src/main.c -o run -Wall -Wpedantic
-	./run
+	mkdir target
+	gcc src/main.c -o target/run -Wall -Wpedantic
+	./target/run
