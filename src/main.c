@@ -11,6 +11,7 @@
 #define MAX_NAME_SIZE 64
 #define MAX_DECK_SIZE 100
 #define MAX_HAND_SIZE 10
+#define MAX_COLUMN_SIZE 8
 #define COUNT_MANA_TYPES 5
 #define SIZE_ALL_CARDS 20
 
@@ -22,6 +23,10 @@
 typedef enum Mana {
      VOID, LIGHT, TIME, FIRE, EARTH, LIGHTNING, WATER, NUMBER_OF_ELEMENTS
 } Mana;
+
+typedef enum CardRow {
+    ROW_CONDUIT, ROW_ARTIFACT
+} CardRow;
 
 typedef enum CardType {
     CONDUIT, ATTACK, SELF, ARTIFACT, BUFF
@@ -40,6 +45,8 @@ typedef struct Card {
 
 typedef struct CardState {
     int life_time;
+    int column;
+    int row;
 } CardState;
 
 typedef struct PlayerState {
@@ -64,12 +71,12 @@ typedef struct Game {
     PlayerState player_state;
 } Game;
 
-int print_tjena(void *g) {
+int print_tjena(void *p) {
     printf("Tjena din jävel\n");
     return SUCCESS;
 }
 
-int print_hejsan(void *g) {
+int print_hejsan(void *p) {
     printf("Hejsan din jävel\n");
     return SUCCESS;
 }
@@ -241,6 +248,17 @@ void remove_mana(int *cost, int *mana) {
     }
 }
 
+int get_row_by_card_type(CardType type) {
+    switch (type) {
+        case CONDUIT:   return ROW_CONDUIT;
+        case ATTACK:    return -1;
+        case SELF:      return -1;
+        case ARTIFACT:  return ROW_ARTIFACT;
+        case BUFF:      return -1;
+    }
+    return -1;
+}
+
 void handle_input(int input, Game *g) {
     PlayerState *p = &g->player_state;
     if (p->hand[input]) {
@@ -254,8 +272,13 @@ void handle_input(int input, Game *g) {
         };
         remove_mana(p->hand[input]->mana_cost, p->mana);
         size_t index = get_index_of_first_empty(p->in_play, MAX_DECK_SIZE);
+        // Update CardState
         p->in_play[index] = p->hand[input];
         p->card_state[index].life_time = p->hand[input]->life_time;
+        p->card_state[index].row = get_row_by_card_type(p->hand[input]->type);
+        printf("Play card where?\n");
+        scanf("%s", g->buffer);
+        p->card_state[index].column = atoi(g->buffer);
         p->hand[input] = NULL;
     } else {
         printf("Card out of range!\n");
@@ -351,6 +374,7 @@ void handle_enemy_round(Game *g) {
 
 void shuffle_deck_into_draw(PlayerState *p) {
     Card **draw = p->draw;
+    //TODO populate array in random order
     for (size_t i = 0; i < MAX_DECK_SIZE; ++i) {
         if (p->deck[i]) {
             *draw = p->deck[i];
@@ -394,6 +418,7 @@ void run_application(Game *game) {
                 handle_input(player_input, game);
                 scanf("%s", game->buffer);
             }
+
             game->error = check_input(game->buffer);
             if (game->error) exit(game->error);
 
