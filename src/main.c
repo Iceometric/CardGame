@@ -3,7 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "SDL2/SDL.h"
+#include <SDL2/SDL_log.h>
+#include <SDL2/SDL_render.h>
+#include <SDL2/SDL_timer.h>
+
 #define str(x) #x
+
+#define WINDOW_WIDTH 1920
+#define WINDOW_HEIGHT 1080
 
 #define SUCCESS 0
 #define BUFFER_SIZE 1024
@@ -25,14 +33,26 @@ typedef enum Mana {
 } Mana;
 
 typedef enum CardRow {
-    ROW_CONDUIT, ROW_ARTIFACT
+    ROW_CONDUIT, ROW_ARTIFACT, ROW_TOTAL
 } CardRow;
 
 typedef enum CardType {
     CONDUIT, ATTACK, SELF, ARTIFACT, BUFF
 } CardType;
 
-typedef enum Error { NO_ERROR = 0, ERROR, ALLOCATION_ERROR } Error;
+typedef enum Error { 
+    NO_ERROR = 0, 
+    ERROR, 
+    ALLOCATION_ERROR,
+    WINDOW_ERROR
+} Error;
+
+typedef struct Game {
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+    SDL_DisplayMode mode;
+    SDL_Event *event;
+} Game;
 
 typedef struct Card {
     char name[MAX_NAME_SIZE];
@@ -62,14 +82,14 @@ typedef struct PlayerState {
     CardState card_state[MAX_DECK_SIZE];
 } PlayerState;
 
-typedef struct Game {
+typedef struct GameState {
     int error;
     int is_running;
     int player_turn;
     char buffer[BUFFER_SIZE];
     Card all_cards[SIZE_ALL_CARDS];
     PlayerState player_state;
-} Game;
+} GameState;
 
 int print_tjena(void *p) {
     printf("Tjena din jävel\n");
@@ -82,26 +102,26 @@ int print_hejsan(void *p) {
 }
 
 int increment_void(void *p) {
-    Game *g = (Game*) p;
-    g->player_state.mana[VOID]++;
+    GameState *gs = (GameState*) p;
+    gs->player_state.mana[VOID]++;
     return SUCCESS;
 }
 
 int increment_light(void *p) {
-    Game *g = (Game*) p;
-    g->player_state.mana[LIGHT]++;
+    GameState *gs = (GameState*) p;
+    gs->player_state.mana[LIGHT]++;
     return SUCCESS;
 }
 
 int increment_time(void *p) {
-    Game *g = (Game*) p;
-    g->player_state.mana[TIME]++;
+    GameState *gs = (GameState*) p;
+    gs->player_state.mana[TIME]++;
     return SUCCESS;
 }
 
 int increment_draw_count(void *p) {
-    Game *g = p;
-    g->player_state.draw_count++;
+    GameState *gs = p;
+    gs->player_state.draw_count++;
     return SUCCESS;
 }
 
@@ -259,15 +279,15 @@ int get_row_by_card_type(CardType type) {
     return -1;
 }
 
-void handle_input(int input, Game *g) {
-    PlayerState *p = &g->player_state;
+void handle_input(int input, GameState *gs) {
+    PlayerState *p = &gs->player_state;
     if (p->hand[input]) {
         if (!enough_mana(p->hand[input]->mana_cost, p->mana)) {
             printf("Not enough mana\n");
             return;
         }
         printf("Played card(%d): %s\n", input, p->hand[input]->name);
-        if (p->hand[input]->on_play_effect(g)) {
+        if (p->hand[input]->on_play_effect(gs)) {
             exit(ERROR);
         };
         remove_mana(p->hand[input]->mana_cost, p->mana);
@@ -277,42 +297,46 @@ void handle_input(int input, Game *g) {
         p->card_state[index].life_time = p->hand[input]->life_time;
         p->card_state[index].row = get_row_by_card_type(p->hand[input]->type);
         printf("Play card where?\n");
-        scanf("%s", g->buffer);
-        p->card_state[index].column = atoi(g->buffer);
+        scanf("%s", gs->buffer);
+        p->card_state[index].column = atoi(gs->buffer);
         p->hand[input] = NULL;
     } else {
         printf("Card out of range!\n");
     }
 }
 
-int is_valid_input(int input, Game *g) {
+int is_valid_input(int input, GameState *gs) {
     int isnumeric = 1;
-    char *p = g->buffer;
-    while(*p && isnumeric && p <= &g->buffer[BUFFER_SIZE]) {
+    char *p = gs->buffer;
+    while(*p && isnumeric && p <= &gs->buffer[BUFFER_SIZE]) {
         isnumeric = isdigit(*p);
         ++p;
     }
     return isnumeric && input <= MAX_HAND_SIZE;
 }
 
-void allocate_resources(Game *g) {
-    g->error = NO_ERROR;
-    g->is_running = 1;
-    g->player_turn = 1;
-    g->player_state.draw_count = 1;
-    g->player_state.health = 40;
+void allocate_resources(GameState *gs, Game *game) {
+    gs->error = NO_ERROR;
+    gs->is_running = 1;
+    gs->player_turn = 1;
+    gs->player_state.draw_count = 1;
+    gs->player_state.health = 40;
 
-    memset(g->player_state.hand,        '\0', sizeof(Card*) * MAX_HAND_SIZE);
-    memset(g->player_state.deck,        '\0', sizeof(Card*) * MAX_DECK_SIZE);
-    memset(g->player_state.draw,        '\0', sizeof(Card*) * MAX_DECK_SIZE);
-    memset(g->player_state.discard,     '\0', sizeof(Card*) * MAX_DECK_SIZE);
-    memset(g->player_state.in_play,     '\0', sizeof(Card*) * MAX_DECK_SIZE);
-    memset(g->player_state.card_state,  '\0', sizeof(CardState) * MAX_DECK_SIZE);
-    memset(g->all_cards,                '\0', sizeof(Card) * SIZE_ALL_CARDS);
-    memset(g->player_state.mana,        '\0', sizeof(int) * NUMBER_OF_ELEMENTS);
+    memset(gs->player_state.hand,        '\0', sizeof(Card*) * MAX_HAND_SIZE);
+    memset(gs->player_state.deck,        '\0', sizeof(Card*) * MAX_DECK_SIZE);
+    memset(gs->player_state.draw,        '\0', sizeof(Card*) * MAX_DECK_SIZE);
+    memset(gs->player_state.discard,     '\0', sizeof(Card*) * MAX_DECK_SIZE);
+    memset(gs->player_state.in_play,     '\0', sizeof(Card*) * MAX_DECK_SIZE);
+    memset(gs->player_state.card_state,  '\0', sizeof(CardState) * MAX_DECK_SIZE);
+    memset(gs->all_cards,                '\0', sizeof(Card) * SIZE_ALL_CARDS);
+    memset(gs->player_state.mana,        '\0', sizeof(int) * NUMBER_OF_ELEMENTS);
+
+    if (SDL_CreateWindowAndRenderer(WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_RESIZABLE, &game->window, &game->renderer)) {
+        exit(-WINDOW_ERROR);
+    };
 }
 
-void clean_up_resources(Game *g) {
+void clean_up_resources(GameState *gs) {
 }
 
 int check_input(char *str) {
@@ -342,13 +366,13 @@ void handle_draw(PlayerState *p) {
     }
 }
 
-void handle_life_time(Game *g) {
-    PlayerState *p = &g->player_state;
+void handle_life_time(GameState *gs) {
+    PlayerState *p = &gs->player_state;
     for (size_t i = 0; i < MAX_DECK_SIZE; ++i) {
         if (!p->in_play[i]) continue; 
 
         printf("Found card %s with life_time: %d\n", p->in_play[i]->name, p->card_state[i].life_time);
-        p->in_play[i]->on_round_start_effect(g);
+        p->in_play[i]->on_round_start_effect(gs);
         if (p->card_state[i].life_time > 0) { 
             p->card_state[i].life_time -= 1;
         }
@@ -360,15 +384,15 @@ void handle_life_time(Game *g) {
     }
 }
 
-void handle_round_start(Game *g) {
-    PlayerState *p = &g->player_state;
-    g->player_turn = 1;
+void handle_round_start(GameState *gs) {
+    PlayerState *p = &gs->player_state;
+    gs->player_turn = 1;
     reset_mana(p);
-    handle_life_time(g);
+    handle_life_time(gs);
     handle_draw(p);
 }
 
-void handle_enemy_round(Game *g) {
+void handle_enemy_round(GameState *gs) {
 
 }
 
@@ -383,56 +407,77 @@ void shuffle_deck_into_draw(PlayerState *p) {
     }
 }
 
-void run_application(Game *game) {
-    game->player_state.deck[0] = &test[0];
-    game->player_state.deck[1] = &test[1];
-    game->player_state.deck[2] = &test[2];
-    game->player_state.deck[3] = &test[3];
-    game->player_state.deck[4] = &test[4];
-    game->player_state.deck[5] = &test[2];
-    game->player_state.deck[6] = &test[5];
-    game->player_state.next_draw = &game->player_state.draw[6];
+void print_board_state(CardState *state) {
+    for (size_t i = 0; i < ROW_TOTAL; ++i) {
+        printf("%lu:", i);
+        for (size_t j = 0; j < MAX_COLUMN_SIZE; ++j) {
+            for (size_t k = 0; k < MAX_DECK_SIZE; ++k) {
+                if (state[k].column == j && state[k].row == i) {
+                    printf("|%2d", state[k].life_time);
+                }
+            }
+            printf("|  ");
+        }
+        printf("\n");
+    }
 
-    shuffle_deck_into_draw(&game->player_state);
+}
+
+void test_draw_stuff(Game *g) {
+}
+
+void run_application(GameState *game_state) {
+    game_state->player_state.deck[0] = &test[0];
+    game_state->player_state.deck[1] = &test[1];
+    game_state->player_state.deck[2] = &test[2];
+    game_state->player_state.deck[3] = &test[3];
+    game_state->player_state.deck[4] = &test[4];
+    game_state->player_state.deck[5] = &test[2];
+    game_state->player_state.deck[6] = &test[5];
+    game_state->player_state.next_draw = &game_state->player_state.draw[6];
+
+    shuffle_deck_into_draw(&game_state->player_state);
 
     int player_input;
-    scanf("%s", game->buffer);
-    while (game->is_running) {
+    scanf("%s", game_state->buffer);
+    while (game_state->is_running) {
 
-        handle_enemy_round(game);
-        handle_round_start(game);
-        if (game->player_state.health <= 0) break;
+        handle_enemy_round(game_state);
+        handle_round_start(game_state);
+        if (game_state->player_state.health <= 0) break;
         
         do {
-            print_hand(&game->player_state);
-            fprintf(stdout, "--- PLAYER - %dhp ---\n", game->player_state.health);
-            if (game->player_state.health <= 0) break;
-            print_mana(game->player_state.mana);
+            print_hand(&game_state->player_state);
+            fprintf(stdout, "--- PLAYER - %dhp ---\n", game_state->player_state.health);
+            if (game_state->player_state.health <= 0) break;
+            print_mana(game_state->player_state.mana);
+            print_board_state(game_state->player_state.card_state);
 
-            scanf("%s", game->buffer);
-            player_input = atoi(game->buffer);
-            game->is_running  = (strcmp(game->buffer, "q") != 0); 
-            game->player_turn = (strcmp(game->buffer, "d") != 0);
+            scanf("%s", game_state->buffer);
+            player_input = atoi(game_state->buffer);
+            game_state->is_running  = (strcmp(game_state->buffer, "q") != 0); 
+            game_state->player_turn = (strcmp(game_state->buffer, "d") != 0);
 
-            if (is_valid_input(player_input, game)) {
-                handle_input(player_input, game);
-                scanf("%s", game->buffer);
+            if (is_valid_input(player_input, game_state)) {
+                handle_input(player_input, game_state);
+                scanf("%s", game_state->buffer);
             }
 
-            game->error = check_input(game->buffer);
-            if (game->error) exit(game->error);
+            game_state->error = check_input(game_state->buffer);
+            if (game_state->error) exit(game_state->error);
 
-        } while (game->player_turn && game->is_running);
+        } while (game_state->player_turn && game_state->is_running);
     }
     CLEAR_SCREEN;
-    if (game->player_state.health <= 0) printf("Game Over!\n");
+    if (game_state->player_state.health <= 0) printf("Game Over!\n");
 }
 
 void run(void) {
+    GameState game_state;
     Game game;
-    allocate_resources  (&game);
-    run_application     (&game);
-    clean_up_resources  (&game);
+    allocate_resources  (&game_state, &game);
+    run_application     (&game_state);
+    clean_up_resources  (&game_state);
 }
 
 int main(int argc, char **argv) {
